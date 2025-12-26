@@ -1,0 +1,14 @@
+command /feminize <player>:
+    permission: OP
+    trigger:
+        execute console command "/skin set https://www.minecraftskins.com/uploads/skins/2025/05/04/pink-femboy-23246011.png?v938 %arg-1%"
+        execute console command "/lp user %arg-1% parent set femboy"
+
+
+
+
+command /unfeminize <player>:
+    permission: OP
+    trigger:
+        execute console command "/skin clear %arg-1%"
+        execute console command "/lp user %arg-1% parent set default"
