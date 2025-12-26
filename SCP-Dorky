@@ -1,0 +1,63 @@
+on right click on entity:
+    if primary group of event-player is "Dorky":
+        if player is sneaking:
+            set {_target2} to clicked entity
+            set {_user2} to event-player
+            kill {_target2}
+            send "you have been eaten by %{_user2}%" to clicked entity
+
+
+on right click:
+    if primary group of event-player is "Dorky"    :
+        if player is sneaking:
+            if clicked block is not air:
+                if tool of player is air:
+                    set {_player} to event-player    
+                    set {_b2} to clicked block
+                    if clicked block is iron door:
+                        set block {_b2} to air
+                        add 1 to player's food level
+                        heal player by 1 hearts
+                        stop
+                    else:
+                        give {_b2} to player
+                        set block {_b2} to air
+                        add 1 to player's food level
+                        heal player by 1 hearts
+
+
+
+on death:
+    if name of victim is "K0S0VA":
+        set {deathloc::%uuid of victim%} to location of victim
+
+on respawn:
+    if name of player is "K0S0VA":
+        teleport player to {deathloc::%uuid of player%}
+
+
+
+
+on jump:
+    if player is on ground:
+        if primary group of event-player is "Dorky":
+            set flight mode of player to true
+
+
+
+command /scp-dorky <player>:
+    permission: op
+    trigger:
+        set {_arg1} to arg-1
+        execute console command "lp user %{_arg1}% parent set dorky"
+
+
+
+on left click:
+    if primary group of event-player is "Dorky":
+        if clicked block is not air:
+            if tool of player is air:
+                if player is sneaking:
+                    set {_block} to targeted block of player
+                    set {_block2} to block above {_block}
+                    teleport event-player to location above {_block}
