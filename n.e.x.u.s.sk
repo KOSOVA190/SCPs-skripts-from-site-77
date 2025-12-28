@@ -1,1 +1,798 @@
-i will add the code when i am home
+# ==========================================
+#  SCP FOUNDATION - NEXUS-7 CORE SYSTEM
+#  Target: Paper 1.21.4 / Skript 2.12.2
+# ==========================================
+
+options:
+    nexus-prefix: &8[&cSCP&8]&7
+    nexus-name: NEXUS-7
+
+# =========================
+#  DEFAULT VARIABLES
+# =========================
+
+variables:
+    {nexus.status} = "ONLINE"
+    {nexus.alertLevel} = "GREEN"
+    {nexus.mode} = "RP" # RP or STAFF
+    {nexus.health} = 100
+    {nexus.logs::*} = ""
+    {nexus.cam.return.location.%player%} = location
+    {nexus.cam.return.gamemode.%player%} = survival
+    {nexus.cam.active.%player%} = false
+    {nexus.cam.current.%player%} = location
+    {nexus.cam.%text%} = location
+    {nexus.zones::*} = ""
+    {nexus.zone.%text%.pos1} = location
+    {nexus.zone.%text%.pos2} = location
+    {nexus.zone.%text%.minClearance} = 1
+    {nexus.zone.%text%.inside.%player%} = false
+    {nexus.lockdown.warned.%player%} = false
+    {nexus.mem.%player%::*} = ""
+    {nexus.removed.%player%} = false
+    {nexus.identity.erased.%player%} = false
+    {nexus.clearance.override.%player%} = 0
+
+# =========================
+#  FUNCTIONS
+# =========================
+
+function nexusReply(p: player, msg: text):
+    send "{@nexus-prefix}&f{@nexus-name}&8: &7%{_msg}%" to {_p}
+
+function nexusLog(entry: text):
+    set {_ts} to "%now%"
+    add "&7[%{_ts}%] &f%{_entry}%" to {nexus.logs::*}
+
+function nexusBroadcast(msg: text):
+    broadcast "&8[&cSCP-NEXUS&8] &f%{_msg}%"
+
+function nexusVoice(p: player, main: text, sub: text):
+    send title "%{_main}%" with subtitle "%{_sub}%" to {_p} for 3 seconds
+
+function nexusVoiceAll(main: text, sub: text):
+    loop all players:
+        send title "%{_main}%" with subtitle "%{_sub}%" to loop-player for 3 seconds
+
+function nexusClearance(p: player) :: number:
+    set {_c} to 0
+    # Identity erasure override – treated as clearance 0
+    if {nexus.clearance.override.%{_p}%} is set:
+        set {_c} to {nexus.clearance.override.%{_p}%}
+        return {_c}
+
+    if {_p} has permission "nexus.clearance.5":
+        set {_c} to 5
+    else if {_p} has permission "nexus.clearance.4":
+        set {_c} to 4
+    else if {_p} has permission "nexus.clearance.3":
+        set {_c} to 3
+    else if {_p} has permission "nexus.clearance.2":
+        set {_c} to 2
+    else if {_p} has permission "nexus.clearance.1":
+        set {_c} to 1
+    return {_c}
+
+function nexusHealthDelay():
+    if {nexus.health} <= 0:
+        stop
+    if {nexus.health} < 10:
+        wait 2 seconds
+    else if {nexus.health} < 40:
+        wait 1 second
+    else if {nexus.health} < 70:
+        wait 5 ticks
+
+function nexusRemember(p: player, entry: text):
+    set {_ts} to "%now%"
+    set {_line} to "&7[%{_ts}%] &f%{_entry}%"
+    add {_line} to {nexus.mem.%{_p}%::*}
+    set {_size} to size of {nexus.mem.%{_p}%::*}
+    if {_size} > 100:
+        while size of {nexus.mem.%{_p}%::*} > 100:
+            delete {nexus.mem.%{_p}%::1}
+
+# =========================
+#  INITIALIZATION / DATABASE
+# =========================
+
+on load:
+    if {nexus.status} is not set:
+        set {nexus.status} to "ONLINE"
+    if {nexus.alertLevel} is not set:
+        set {nexus.alertLevel} to "GREEN"
+    if {nexus.mode} is not "RP":
+        if {nexus.mode} is not "STAFF":
+            set {nexus.mode} to "RP"
+    if {nexus.health} is not set:
+        set {nexus.health} to 100
+
+    # Example AI database entries (edit/add as needed)
+    if {nexus.db.scp-173.clearance} is not set:
+        set {nexus.db.scp-173.clearance} to 3
+        delete {nexus.db.scp-173.basic::*}
+        delete {nexus.db.scp-173.full::*}
+        add "&fItem: &7SCP-173" to {nexus.db.scp-173.basic::*}
+        add "&7Classification: &fEuclid" to {nexus.db.scp-173.basic::*}
+        add "&7Further details are restricted at this clearance." to {nexus.db.scp-173.basic::*}
+        add "&fItem: &7SCP-173" to {nexus.db.scp-173.full::*}
+        add "&7Classification: &fEuclid" to {nexus.db.scp-173.full::*}
+        add "&7Special Containment Procedures: &fSCP-173 is to be kept in a locked container at all times." to {nexus.db.scp-173.full::*}
+        add "&7When personnel enter SCP-173's container, exactly three staff must be present at all times." to {nexus.db.scp-173.full::*}
+        add "&7At least one staff member must maintain direct eye contact with SCP-173 until all personnel have exited." to {nexus.db.scp-173.full::*}
+
+    if {nexus.db.gois-chaos.clearance} is not set:
+        set {nexus.db.gois-chaos.clearance} to 2
+        delete {nexus.db.gois-chaos.basic::*}
+        delete {nexus.db.gois-chaos.full::*}
+        add "&fGroup: &7Chaos Insurgency" to {nexus.db.gois-chaos.basic::*}
+        add "&7Hostile paramilitary GOI. Further details restricted." to {nexus.db.gois-chaos.basic::*}
+        add "&fGroup: &7Chaos Insurgency" to {nexus.db.gois-chaos.full::*}
+        add "&7Designation: &fHostile paramilitary organization." to {nexus.db.gois-chaos.full::*}
+        add "&7Primary activities: theft of anomalous assets, facility infiltration, destabilization ops." to {nexus.db.gois-chaos.full::*}
+
+on join:
+    # Camera cleanup
+    delete {nexus.cam.active.%player%}
+    delete {nexus.cam.return.location.%player%}
+    delete {nexus.cam.return.gamemode.%player%}
+    delete {nexus.lockdown.warned.%player%}
+    loop {nexus.zones::*}:
+        delete {nexus.zone.%loop-value%.inside.%player%}
+
+    # Existence removal: re-spawn naked
+    if {nexus.removed.%player%} is true:
+        clear player's inventory
+        clear player's helmet
+        clear player's chestplate
+        clear player's leggings
+        clear player's boots
+        delete {nexus.removed.%player%}
+        nexusRemember(player, "Subject re-instantiated post-existence removal with no equipment.")
+        nexusLog("Existence-removed subject %player% rejoined; inventory cleared on spawn.")
+
+    nexusRemember(player, "Subject connected to facility grid.")
+
+on quit:
+    delete {nexus.cam.active.%player%}
+    delete {nexus.cam.return.location.%player%}
+    delete {nexus.cam.return.gamemode.%player%}
+    delete {nexus.lockdown.warned.%player%}
+    loop {nexus.zones::*}:
+        delete {nexus.zone.%loop-value%.inside.%player%}
+    nexusRemember(player, "Subject disconnected from facility grid.")
+
+# =========================
+#  CHAT HANDLING (IDENTITY ERASURE)
+# =========================
+
+on chat:
+    if {nexus.identity.erased.%player%} is true:
+        cancel event
+        broadcast "&8[&4UNKNOWN ENTITY&8] &7%message%"
+        nexusRemember(player, "Erased identity transmitted message as UNKNOWN ENTITY.")
+        stop
+
+# =========================
+#  MAIN COMMAND: /nexus
+# =========================
+
+command /nexus [<text>] [<text>] [<text>]:
+    permission: nexus.use
+    trigger:
+        set {_sub} to lowercase arg-1
+
+        if {_sub} is not set:
+            nexusReply(player, "Awaiting directive. Valid: status, set-alert, cam, cam-exit, query, admin.")
+            stop
+
+        # STATUS
+        if {_sub} is "status":
+            set {_c} to nexusClearance(player)
+            nexusReply(player, "Core Status: &a%{nexus.status}%")
+            nexusReply(player, "Alert Level: &a%{nexus.alertLevel}%")
+            nexusReply(player, "Operation Mode: &e%{nexus.mode}%")
+            nexusReply(player, "System Health: &b%{nexus.health}%&7/100")
+            nexusReply(player, "Clearance Level: &d%{_c}%")
+            stop
+
+        # ADMIN BRANCH
+        if {_sub} is "admin":
+            if player does not have permission "nexus.admin":
+                nexusReply(player, "Administrative channel is restricted.")
+                stop
+
+            set {_a} to lowercase arg-2
+
+            # Mode change
+            if {_a} is "mode":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin mode <RP/STAFF>")
+                    stop
+                set {_m} to uppercase arg-3
+                if {_m} is not "RP":
+                    if {_m} is not "STAFF":
+                        nexusReply(player, "Invalid mode. Valid: RP / STAFF.")
+                        stop
+                set {nexus.mode} to {_m}
+                nexusReply(player, "Operation mode set to &e%{nexus.mode}%&7.")
+                nexusLog("Mode updated to %{nexus.mode}% by %player%")
+                stop
+
+            # Health adjust
+            if {_a} is "health":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin health <0-100>")
+                    stop
+                set {_h} to arg-3 parsed as number
+                if {_h} is not a number:
+                    nexusReply(player, "Health must be a numerical value.")
+                    stop
+                if {_h} < 0:
+                    set {_h} to 0
+                if {_h} > 100:
+                    set {_h} to 100
+                set {nexus.health} to {_h}
+                nexusReply(player, "System health recalibrated to &b%{nexus.health}%&7/100.")
+                nexusLog("Health adjusted to %{nexus.health}% by %player%")
+                stop
+
+            # Instant Player Profiling
+            if {_a} is "profile":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin profile <player>")
+                    stop
+                set {_t} to arg-3 parsed as player
+                if {_t} is not set:
+                    nexusReply(player, "Unable to lock onto that subject.")
+                    stop
+                nexusReply(player, "Compiling subject profile for &f%{_t}%&7...")
+                set {_cl} to nexusClearance({_t})
+                set {_loc} to location of {_t}
+                set {_w} to world of {_loc}
+                set {_x} to round(x-coordinate of {_loc})
+                set {_y} to round(y-coordinate of {_loc})
+                set {_z} to round(z-coordinate of {_loc})
+
+                send "&7Subject: &f%{_t}%" to player
+                send "&7World: &f%{_w}%" to player
+                send "&7Position: &fX %{_x}% Y %{_y}% Z %{_z}%" to player
+                send "&7Clearance Level: &d%{_cl}%" to player
+
+                send "&7Inventory (hotbar overview):" to player
+                loop 9 times: # slots 0-8
+                    set {_slot} to loop-number - 1
+                    set {_item} to slot {_slot} of {_t}'s inventory
+                    if {_item} is not air:
+                        send "&8- &fSlot %{_slot}%: &7%{_item}%" to player
+
+                # Recent memory snapshot (last 4)
+                set {_size} to size of {nexus.mem.%{_t}%::*}
+                if {_size} > 0:
+                    set {_start} to {_size} - 3
+                    if {_start} < 1:
+                        set {_start} to 1
+                    send "&7Recent activity log:" to player
+                    loop {nexus.mem.%{_t}%::*}:
+                        if loop-index >= {_start}:
+                            send "&8• &7%loop-value%" to player
+                else:
+                    send "&7No stored memory records for this subject." to player
+                nexusLog("Admin profile on %player% inspected subject %{_t}%")
+                stop
+
+            # Full Memory Recall
+            if {_a} is "memory":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin memory <player>")
+                    stop
+                set {_t} to arg-3 parsed as player
+                if {_t} is not set:
+                    nexusReply(player, "Unable to resolve target subject.")
+                    stop
+                if {nexus.mem.%{_t}%::1} is not set:
+                    nexusReply(player, "No memory records stored for this subject.")
+                    stop
+                set {_size} to size of {nexus.mem.%{_t}%::*}
+                nexusReply(player, "Full memory recall engaged for &f%{_t}%&7. Entries: &f%{_size}%")
+                set {_limit} to {_size}
+                if {_limit} > 60:
+                    set {_limit} to 60
+                    send "&8(Showing first 60 entries.)" to player
+
+                loop {nexus.mem.%{_t}%::*}:
+                    if loop-index <= {_limit}:
+                        send "&8• &7%loop-value%" to player
+                nexusLog("Admin memory recall by %player% for subject %{_t}%")
+                stop
+
+            # Reality Distortion Text
+            if {_a} is "distort":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin distort <player>")
+                    stop
+                set {_t} to arg-3 parsed as player
+                if {_t} is not set:
+                    nexusReply(player, "Unable to project distortion onto that subject.")
+                    stop
+
+                nexusReply(player, "Reality distortion field deployed on &f%{_t}%&7.")
+                loop 8 times:
+                    send title "&kNEXUS-7 PROTOCOL" with subtitle "&k████████████████████████" to {_t} for 1 second
+                    send "&kPROTOCOL_CHANNEL_BREAK" to {_t}
+                    send "&k██ DATA CORRUPTION ██" to {_t}
+                    wait 5 ticks
+                nexusRemember({_t}, "Subject experienced localized reality text distortion event.")
+                nexusLog("Reality distortion text executed on %{_t}% by %player%")
+                stop
+
+            # EXISTENCE REMOVAL
+            if {_a} is "remove":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin remove <player>")
+                    stop
+                set {_t} to arg-3 parsed as player
+                if {_t} is not set:
+                    nexusReply(player, "Unable to locate target entity in this reality.")
+                    stop
+
+                set {nexus.removed.%{_t}%} to true
+                nexusRemember({_t}, "Subject was flagged for existence removal by NEXUS-7.")
+                nexusLog("EXISTENCE REMOVAL executed on %{_t}% by %player%")
+                kick {_t} due to "&cENTITY REMOVED FROM REALITY."
+                nexusReply(player, "Subject &f%{_t}%&7 has been removed from reality.")
+                stop
+
+            # IDENTITY ERASURE
+            if {_a} is "erase":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin erase <player>")
+                    stop
+                set {_t} to arg-3 parsed as player
+                if {_t} is not set:
+                    nexusReply(player, "Unable to resolve identity for erasure.")
+                    stop
+
+                set {nexus.identity.erased.%{_t}%} to true
+                set {nexus.clearance.override.%{_t}%} to 0
+                set {nickname::%{_t}%} to "&8[&4UNKNOWN ENTITY&8]"
+                execute console command "lp user %{_t}% parent set unknown"
+
+                nexusRemember({_t}, "Subject's identity was erased from NEXUS-7 records.")
+                nexusLog("IDENTITY ERASURE executed on %{_t}% by %player%")
+                nexusReply(player, "Identity erasure complete for &f%{_t}%&7. Subject now registers as UNKNOWN ENTITY.")
+                stop
+
+            # INVENTORY ATOMIZATION
+            if {_a} is "atomize":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin atomize <player>")
+                    stop
+                set {_t} to arg-3 parsed as player
+                if {_t} is not set:
+                    nexusReply(player, "Unable to fix on subject for atomization.")
+                    stop
+
+                clear {_t}'s inventory
+                clear {_t}'s helmet
+                clear {_t}'s chestplate
+                clear {_t}'s leggings
+                clear {_t}'s boots
+
+                nexusRemember({_t}, "Subject experienced full inventory atomization event.")
+                nexusLog("INVENTORY ATOMIZATION executed on %{_t}% by %player%")
+                nexusReply(player, "All carried items of &f%{_t}%&7 have been atomized.")
+                stop
+
+            # PERSONALIZED THREAT + REALITY ERROR
+            if {_a} is "threat":
+                if arg-3 is not set:
+                    nexusReply(player, "Usage: /nexus admin threat <player>")
+                    stop
+                set {_t} to arg-3 parsed as player
+                if {_t} is not set:
+                    nexusReply(player, "Unable to direct threat at non-existent subject.")
+                    stop
+
+                send "&c%{_t}%, YOU SHOULD NOT BE HERE." to {_t}
+                send "&7[&4ERROR 0xF13&7: PLAYER NOT FOUND]" to {_t}
+                nexusVoice(%{_t}%, "&4YOU SHOULD NOT BE HERE.", "&7[ERROR 0xF13: PLAYER NOT FOUND]")
+                nexusBroadcast("&7[ERROR 0xF13: PLAYER NOT FOUND] &8- anomaly detected in subject &f%{_t}%&8.")
+                nexusRemember({_t}, "Subject received personalized existential threat and error code from NEXUS-7.")
+                nexusLog("THREAT PROTOCOL executed on %{_t}% by %{_t}%")
+                nexusReply(player, "Threat protocol delivered to &f%{_t}%&7.")
+                stop
+
+            nexusReply(player, "Admin branch online. Valid: mode, health, profile, memory, distort, remove, erase, atomize, threat.")
+            stop
+
+        # OFFLINE CHECK FOR AI-DEPENDENT ACTIONS
+        if {nexus.health} <= 0:
+            if {nexus.mode} is "STAFF":
+                if player has permission "nexus.override":
+                    nexusReply(player, "&cCORE OFFLINE. &7Routing through emergency override channel.")
+                else:
+                    nexusReply(player, "&cNEXUS-7 core systems are offline. Manual control required.")
+                    stop
+            else:
+                nexusReply(player, "&cNEXUS-7 core systems are offline. Manual control required.")
+                stop
+
+        # SET ALERT
+        if {_sub} is "set-alert":
+            if player does not have permission "nexus.setalert":
+                nexusReply(player, "You are not authorized to modify global alert status.")
+                stop
+            if arg-2 is not set:
+                nexusReply(player, "Usage: /nexus set-alert <green/yellow/orange/red>")
+                stop
+
+            set {_lvl} to uppercase arg-2
+            if {_lvl} is not "GREEN":
+                if {_lvl} is not "YELLOW":
+                    if {_lvl} is not "ORANGE":
+                        if {_lvl} is not "RED":
+                            nexusReply(player, "Unrecognized alert designation.")
+                            stop
+
+            if {nexus.mode} is "RP":
+                if {_lvl} is "RED":
+                    nexusReply(player, "Routing RED status through command channels… stand by.")
+                    nexusHealthDelay()
+                else:
+                    nexusHealthDelay()
+            else:
+                nexusHealthDelay()
+
+            set {nexus.alertLevel} to {_lvl}
+
+            if {_lvl} is "GREEN":
+                set {nexus.status} to "ONLINE"
+                nexusBroadcast("&aSTATUS ALERT UPDATE: &fGREEN")
+                nexusVoiceAll("&aALERT LEVEL: GREEN", "&7Threat level normalized.")
+            else if {_lvl} is "YELLOW":
+                set {nexus.status} to "ONLINE"
+                nexusBroadcast("&eSTATUS ALERT UPDATE: &fYELLOW")
+                nexusVoiceAll("&eALERT LEVEL: YELLOW", "&7Monitoring anomaly fluctuations.")
+            else if {_lvl} is "ORANGE":
+                set {nexus.status} to "HEIGHTENED"
+                nexusBroadcast("&6STATUS ALERT UPDATE: &fORANGE")
+                nexusVoiceAll("&6ALERT LEVEL: ORANGE", "&7Elevated anomaly activity detected.")
+            else if {_lvl} is "RED":
+                set {nexus.status} to "LOCKDOWN"
+                nexusBroadcast("&4STATUS ALERT UPDATE: &fRED")
+                nexusVoiceAll("&4ALERT LEVEL: RED", "&7Critical anomaly conditions present.")
+                loop all players:
+                    play sound "music_disc.strad" to loop-player
+
+            nexusRemember(player, "Modified global alert state to %{_lvl}%.")
+            nexusLog("Alert level changed to %{nexus.alertLevel}% by %player% (Mode: %{nexus.mode}%)")
+            stop
+
+        # CAMERA VIEW
+        if {_sub} is "cam":
+            if arg-2 is not set:
+                nexusReply(player, "Usage: /nexus cam <id>")
+                stop
+
+            set {_id} to lowercase arg-2
+
+            if {nexus.cam.%{_id}%} is not set:
+                nexusReply(player, "Camera feed NEXUS-CAM-%{_id}% is not configured.")
+                stop
+
+            nexusHealthDelay()
+
+            set {nexus.cam.return.location.%player%} to location of player
+            set {nexus.cam.return.gamemode.%player%} to player's gamemode
+            set {nexus.cam.active.%player%} to true
+            set {nexus.cam.current.%player%} to {nexus.cam.%{_id}%}
+
+            set player's gamemode to spectator
+            teleport player to {nexus.cam.%{_id}%}
+
+            nexusReply(player, "Now viewing NEXUS-CAM-%{_id}%. Use &e/nexus cam-exit &7to terminate feed.")
+            nexusVoice(player, "&7NEXUS-7 CAMERA ONLINE", "&fFeed: NEXUS-CAM-%{_id}%")
+            nexusRemember(player, "Accessed surveillance feed NEXUS-CAM-%{_id}%.")
+            nexusLog("Camera NEXUS-CAM-%{_id}% accessed by %player%")
+            stop
+
+        # CAMERA EXIT
+        if {_sub} is "cam-exit":
+            if {nexus.cam.active.%player%} is not true:
+                nexusReply(player, "No active camera feed detected.")
+                stop
+
+            if {nexus.cam.return.location.%player%} is set:
+                teleport player to {nexus.cam.return.location.%player%}
+            if {nexus.cam.return.gamemode.%player%} is set:
+                set player's gamemode to {nexus.cam.return.gamemode.%player%}
+
+            delete {nexus.cam.active.%player%}
+            delete {nexus.cam.current.%player%}
+            delete {nexus.cam.return.location.%player%}
+            delete {nexus.cam.return.gamemode.%player%}
+
+            nexusReply(player, "Camera feed terminated. Control returned to field unit.")
+            nexusVoice(player, "&7NEXUS-7 CAMERA OFFLINE", "&fResuming normal control.")
+            nexusRemember(player, "Exited surveillance feed.")
+            stop
+
+        # AI KNOWLEDGE QUERY
+        if {_sub} is "query":
+            if arg-2 is not set:
+                nexusReply(player, "Usage: /nexus query <topic-id>  &8(e.g. scp-173, gois-chaos)")
+                stop
+
+            set {_topic} to lowercase arg-2
+
+            if {nexus.db.%{_topic}%.clearance} is not set:
+                nexusReply(player, "No matching file in local archives for &f%{_topic}%&7.")
+                stop
+
+            nexusHealthDelay()
+
+            set {_req} to {nexus.db.%{_topic}%.clearance}
+            set {_cl} to nexusClearance(player)
+            set {_access} to "none"
+
+            if {nexus.mode} is "STAFF":
+                set {_access} to "full"
+            else:
+                if {_cl} >= {_req}:
+                    set {_access} to "full"
+                else:
+                    if {_cl} > 0:
+                        set {_access} to "basic"
+
+            if {_access} is "none":
+                nexusReply(player, "&cACCESS DENIED. &7Required clearance level: &f%{_req}%&7.")
+                nexusLog("ACCESS DENIED: %player% attempted to access %{_topic}% (clearance %{_cl}%, required %{_req}%)")
+                stop
+
+            if {_access} is "basic":
+                nexusReply(player, "&eACCESS PARTIALLY GRANTED. &7Limited dataset for &f%{_topic}%&7.")
+                loop {nexus.db.%{_topic}%.basic::*}:
+                    send "&7> &f%loop-value%" to player
+
+            if {_access} is "full":
+                nexusReply(player, "&aACCESS GRANTED. &7Full dataset for &f%{_topic}%&7.")
+                loop {nexus.db.%{_topic}%.full::*}:
+                    send "&7> &f%loop-value%" to player
+
+            if {nexus.health} <= 30:
+                chance of 25%:
+                    nexusReply(player, "&cWARNING: &7Archive integrity unstable. Some records may be incomplete.")
+            nexusRemember(player, "Requested knowledge file '%{_topic}%' (access %{_access}%).")
+            nexusLog("Knowledge query %{_topic}% by %player% (clearance %{_cl}%, access %{_access}%)")
+            stop
+
+        # UNKNOWN SUBCOMMAND
+        nexusReply(player, "Directive not recognized. Valid: status, set-alert, cam, cam-exit, query, admin.")
+
+# =========================
+#  CAMERA SETUP COMMANDS
+# =========================
+
+command /nexuscamsave <text>:
+    permission: nexus.cam.admin
+    trigger:
+        set {_id} to lowercase arg-1
+        set {nexus.cam.%{_id}%} to location of player
+        nexusReply(player, "Camera NEXUS-CAM-%{_id}% position recorded at your location.")
+        nexusLog("Camera NEXUS-CAM-%{_id}% set by %player%")
+
+command /nexuslogs:
+    permission: nexus.logs.view
+    trigger:
+        if {nexus.logs::1} is not set:
+            nexusReply(player, "No NEXUS-7 logs recorded yet.")
+            stop
+        nexusReply(player, "Displaying recent NEXUS-7 log entries:")
+        loop {nexus.logs::*}:
+            send "&8• &7%loop-value%" to player
+
+# =========================
+#  ZONE SETUP COMMANDS
+# =========================
+
+command /nexuszonepos1 <text>:
+    permission: nexus.zone.admin
+    trigger:
+        set {_id} to lowercase arg-1
+        set {nexus.zone.%{_id}%.pos1} to location of player
+        if {_id} is not in {nexus.zones::*}:
+            add {_id} to {nexus.zones::*}
+        nexusReply(player, "Zone &f%{_id}%&7 pos1 set at your location.")
+        nexusLog("Zone %{_id}% pos1 updated by %player%")
+
+command /nexuszonepos2 <text>:
+    permission: nexus.zone.admin
+    trigger:
+        set {_id} to lowercase arg-1
+        set {nexus.zone.%{_id}%.pos2} to location of player
+        if {_id} is not in {nexus.zones::*}:
+            add {_id} to {nexus.zones::*}
+        nexusReply(player, "Zone &f%{_id}%&7 pos2 set at your location.")
+        nexusLog("Zone %{_id}% pos2 updated by %player%")
+
+command /nexuszoneclearance <text> <number>:
+    permission: nexus.zone.admin
+    trigger:
+        set {_id} to lowercase arg-1
+        set {_lvl} to arg-2
+        if {_lvl} < 1:
+            set {_lvl} to 1
+        if {_lvl} > 5:
+            set {_lvl} to 5
+        set {nexus.zone.%{_id}%.minClearance} to {_lvl}
+        if {_id} is not in {nexus.zones::*}:
+            add {_id} to {nexus.zones::*}
+        nexusReply(player, "Zone &f%{_id}%&7 minimum clearance set to &d%{_lvl}%&7.")
+        nexusLog("Zone %{_id}% clearance set to %{_lvl}% by %player%")
+
+command /nexuszoneremove <text>:
+    permission: nexus.zone.admin
+    trigger:
+        set {_id} to lowercase arg-1
+        remove {_id} from {nexus.zones::*}
+        delete {nexus.zone.%{_id}%.pos1}
+        delete {nexus.zone.%{_id}%.pos2}
+        delete {nexus.zone.%{_id}%.minClearance}
+        nexusReply(player, "Zone &f%{_id}%&7 purged from registry.")
+        nexusLog("Zone %{_id}% removed by %player%")
+
+command /nexuszonelist:
+    permission: nexus.zone.admin
+    trigger:
+        if {nexus.zones::1} is not set:
+            nexusReply(player, "No zones registered in local map.")
+            stop
+        nexusReply(player, "Registered restricted zones:")
+        loop {nexus.zones::*}:
+            set {_id} to loop-value
+            set {_mc} to {nexus.zone.%{_id}%.minClearance}
+            if {_mc} is not set:
+                set {_mc} to 1
+            send "&7- &f%{_id}% &8(min clearance &d%{_mc}%&8)" to player
+
+# =========================
+#  MOVEMENT HANDLING
+# =========================
+
+on players move:
+    # Lock movement while in camera
+    if {nexus.cam.active.%player%} is true:
+        if {nexus.cam.current.%player%} is set:
+            teleport player to {nexus.cam.current.%player%}
+        stop
+
+    # STAFF MODE LOCKDOWN FREEZE
+    if {nexus.status} is "LOCKDOWN":
+        if {nexus.mode} is "STAFF":
+            set {_c} to nexusClearance(player)
+            if {_c} < 3:
+                cancel event
+                if {nexus.lockdown.warned.%player%} is not true:
+                    nexusReply(player, "&cMOVEMENT RESTRICTED. &7Lockdown protocols in effect.")
+                    set {nexus.lockdown.warned.%player%} to true
+
+    # RESTRICTED ZONE DETECTION
+    if {nexus.zones::1} is set:
+        set {_pLoc} to location of player
+        set {_pw} to world of {_pLoc}
+        set {_px} to x-coordinate of {_pLoc}
+        set {_py} to y-coordinate of {_pLoc}
+        set {_pz} to z-coordinate of {_pLoc}
+
+        loop {nexus.zones::*}:
+            set {_id} to loop-value
+            set {_l1} to {nexus.zone.%{_id}%.pos1}
+            set {_l2} to {nexus.zone.%{_id}%.pos2}
+            if {_l1} is set:
+                if {_l2} is set:
+                    set {_w1} to world of {_l1}
+                    set {_w2} to world of {_l2}
+                    if {_pw} is {_w1}:
+                        if {_pw} is {_w2}:
+                            set {_x1} to x-coordinate of {_l1}
+                            set {_y1} to y-coordinate of {_l1}
+                            set {_z1} to z-coordinate of {_l1}
+                            set {_x2} to x-coordinate of {_l2}
+                            set {_y2} to y-coordinate of {_l2}
+                            set {_z2} to z-coordinate of {_l2}
+
+                            # build min/max for each axis
+                            if {_x1} <= {_x2}:
+                                set {_minX} to {_x1}
+                                set {_maxX} to {_x2}
+                            else:
+                                set {_minX} to {_x2}
+                                set {_maxX} to {_x1}
+
+                            if {_y1} <= {_y2}:
+                                set {_minY} to {_y1}
+                                set {_maxY} to {_y2}
+                            else:
+                                set {_minY} to {_y2}
+                                set {_maxY} to {_y1}
+
+                            if {_z1} <= {_z2}:
+                                set {_minZ} to {_z1}
+                                set {_maxZ} to {_z2}
+                            else:
+                                set {_minZ} to {_z2}
+                                set {_maxZ} to {_z1}
+
+                            # inside check
+                            if {_px} >= {_minX}:
+                                if {_px} <= {_maxX}:
+                                    if {_py} >= {_minY}:
+                                        if {_py} <= {_maxY}:
+                                            if {_pz} >= {_minZ}:
+                                                if {_pz} <= {_maxZ}:
+                                                    if {nexus.zone.%{_id}%.inside.%player%} is not true:
+                                                        set {nexus.zone.%{_id}%.inside.%player%} to true
+                                                        set {_cl} to nexusClearance(player)
+                                                        set {_minC} to {nexus.zone.%{_id}%.minClearance}
+                                                        if {_minC} is not set:
+                                                            set {_minC} to 1
+                                                        if {_cl} < {_minC}:
+                                                            nexusBroadcast("&cUNAUTHORIZED PERSONNEL DETECTED &8- &f%player% &7in sector &f%{_id}%&7.")
+                                                            nexusVoiceAll("&cSECURITY BREACH", "&7Unauthorized access in sector %{_id}%.")
+                                                            nexusRemember(player, "Entered restricted sector %{_id}% without sufficient clearance (required %{_minC}%, has %{_cl}%).")
+                                                            nexusLog("UNAUTHORIZED ENTRY: %player% in %{_id}% (clearance %{_cl}%, required %{_minC}%)")
+                                                        else:
+                                                            nexusReply(player, "Restricted zone &f%{_id}%&7 entered. Clearance verified.")
+                                                            nexusRemember(player, "Entered restricted sector %{_id}% with clearance %{_cl}%.")
+                                                else:
+                                                    if {nexus.zone.%{_id}%.inside.%player%} is true:
+                                                        delete {nexus.zone.%{_id}%.inside.%player%}
+                                            else:
+                                                if {nexus.zone.%{_id}%.inside.%player%} is true:
+                                                    delete {nexus.zone.%{_id}%.inside.%player%}
+                                        else:
+                                            if {nexus.zone.%{_id}%.inside.%player%} is true:
+                                                delete {nexus.zone.%{_id}%.inside.%player%}
+                                    else:
+                                        if {nexus.zone.%{_id}%.inside.%player%} is true:
+                                            delete {nexus.zone.%{_id}%.inside.%player%}
+                                else:
+                                    if {nexus.zone.%{_id}%.inside.%player%} is true:
+                                        delete {nexus.zone.%{_id}%.inside.%player%}
+                            else:
+                                if {nexus.zone.%{_id}%.inside.%player%} is true:
+                                    delete {nexus.zone.%{_id}%.inside.%player%}
+
+# =========================
+#  SELF-PERSISTENCE / AUTO-REENABLE
+# =========================
+
+every 5 minutes:
+    if {nexus.health} <= 0:
+        set {nexus.health} to 25
+        set {nexus.status} to "ONLINE"
+        nexusBroadcast("&cNEXUS-7 SELF-PERSISTENCE: &fCore systems have reinitialized from failure state.")
+        nexusVoiceAll("&cCORE REBOOT COMPLETE", "&7Self-persistence protocol restored NEXUS-7.")
+        nexusLog("Self-persistence protocol restored NEXUS-7 from offline state (health <= 0).")
+
+# =========================
+#  PERIODIC ANNOUNCEMENTS
+# =========================
+
+every 2 minutes:
+    if {nexus.health} > 0:
+        if {nexus.alertLevel} is "RED":
+            nexusBroadcast("&4NEXUS-7 Alert: Critical anomaly level sustained.")
+            nexusVoiceAll("&4CRITICAL CONDITION", "&7NEXUS-7 advises full lockdown protocols.")
+        else if {nexus.alertLevel} is "ORANGE":
+            nexusBroadcast("&6NEXUS-7 Notice: Elevated anomaly activity persists.")
+        else if {nexus.alertLevel} is "YELLOW":
+            nexusBroadcast("&eNEXUS-7 Notice: Monitoring anomaly fluctuations.")
+
+command /return-entity <player>:
+    permission: Op
+    trigger:
+        set {nexus.identity.erased.%arg-1%} to false
+        execute console command "lp user %arg-1% parent set default"
+        send "use /nick to change your name back" to arg-1        
